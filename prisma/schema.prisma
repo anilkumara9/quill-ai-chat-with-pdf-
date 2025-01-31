@@ -1,0 +1,301 @@
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["multiSchema"]
+  engineType      = "binary"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DATABASE_URL_UNPOOLED")
+  schemas   = ["public"]
+}
+
+model User {
+  id            String     @id
+  name          String?
+  email         String     @unique
+  emailVerified DateTime?
+  image         String?
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+  username      String?    @unique @db.VarChar(50)
+  bio           String?
+  categories    Category[]
+  chats         Chat[]
+  shares        Share[]
+  comments      Comment[]
+  documents     Document[]
+  posts         Post[]
+  votes         Vote[]
+  users_A       User[]     @relation("UserFollows")
+  users_B       User[]     @relation("UserFollows")
+
+  @@index([email])
+  @@index([username])
+  @@map("users")
+  @@schema("public")
+}
+
+model Document {
+  id               String             @id @default(cuid())
+  content          String
+  processedContent String?            @db.Text
+  fileType         String             @db.VarChar(50)
+  fileSize         Int
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+  userId           String
+  categoryId       String?
+  title            String             @db.VarChar(255)
+  status           String             @default("pending") @db.VarChar(20)
+  uploadedAt       DateTime           @default(now())
+  url              String?
+  chats            Chat[]
+  access           DocumentAccess[]
+  activities       DocumentActivity[]
+  shares           Share[]
+  shareInvitations ShareInvitation[]
+  shareLinks       ShareLink[]
+  versions         Version[]
+  category         Category?          @relation(fields: [categoryId], references: [id])
+  user             User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, title])
+  @@index([userId, createdAt])
+  @@index([categoryId])
+  @@index([fileType])
+  @@index([createdAt])
+  @@index([userId, fileType])
+  @@index([userId, categoryId])
+  @@index([status])
+  @@map("documents")
+  @@schema("public")
+}
+
+model Category {
+  id        String     @id @default(cuid())
+  name      String
+  color     String?
+  userId    String
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  documents Document[]
+
+  @@index([userId])
+  @@schema("public")
+}
+
+model Version {
+  id              String   @id @default(cuid())
+  content         String
+  processedContent String? @db.Text
+  documentId      String
+  createdAt       DateTime @default(now())
+  document        Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  changes         String?  @db.Text
+
+  @@index([documentId])
+  @@index([documentId, createdAt])
+  @@schema("public")
+}
+
+model Share {
+  id         String   @id @default(cuid())
+  documentId String
+  userId     String
+  permission String
+  createdAt  DateTime @default(now())
+  document   Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([documentId])
+  @@index([userId])
+  @@index([documentId, userId])
+  @@index([permission])
+  @@schema("public")
+}
+
+model Post {
+  id        String    @id @default(cuid())
+  title     String    @db.VarChar(255)
+  content   String
+  published Boolean   @default(false)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  authorId  String
+  comments  Comment[]
+  author    User      @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  votes     Vote[]
+  tags      Tag[]     @relation("PostToTag")
+
+  @@index([authorId])
+  @@index([createdAt])
+  @@index([published])
+  @@map("posts")
+  @@schema("public")
+}
+
+model Comment {
+  id        String    @id @default(cuid())
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  authorId  String
+  postId    String
+  replyToId String?
+  content   String
+  author    User      @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  post      Post      @relation(fields: [postId], references: [id], onDelete: Cascade)
+  replyTo   Comment?  @relation("CommentReplies", fields: [replyToId], references: [id])
+  replies   Comment[] @relation("CommentReplies")
+  votes     Vote[]
+
+  @@index([authorId])
+  @@index([postId])
+  @@index([createdAt])
+  @@index([replyToId])
+  @@map("comments")
+  @@schema("public")
+}
+
+model Vote {
+  id        String   @id @default(cuid())
+  type      VoteType
+  createdAt DateTime @default(now())
+  authorId  String
+  postId    String?
+  commentId String?
+  updatedAt DateTime @updatedAt
+  author    User     @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  comment   Comment? @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  post      Post?    @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@unique([authorId, postId, commentId])
+  @@index([authorId])
+  @@index([postId])
+  @@index([commentId])
+  @@index([type])
+  @@map("votes")
+  @@schema("public")
+}
+
+model Tag {
+  id          String   @id @default(cuid())
+  name        String   @unique @db.VarChar(50)
+  description String?
+  createdAt   DateTime @default(now())
+  posts       Post[]   @relation("PostToTag")
+
+  @@index([name])
+  @@map("tags")
+  @@schema("public")
+}
+
+model Chat {
+  id         String    @id @default(cuid())
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+  userId     String
+  documentId String?
+  document   Document? @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages   Message[]
+
+  @@index([userId, createdAt])
+  @@index([documentId, createdAt])
+  @@index([userId, documentId])
+  @@schema("public")
+}
+
+model Message {
+  id        String   @id @default(cuid())
+  content   String
+  role      String   @db.VarChar(20)
+  createdAt DateTime @default(now())
+  chatId    String
+  chat      Chat     @relation(fields: [chatId], references: [id], onDelete: Cascade)
+
+  @@index([chatId, createdAt])
+  @@index([role])
+  @@index([chatId, role])
+  @@schema("public")
+}
+
+model ShareLink {
+  id         String    @id @default(cuid())
+  documentId String
+  permission String    @db.VarChar(10)
+  expiresAt  DateTime?
+  createdBy  String
+  createdAt  DateTime  @default(now())
+  lastUsedAt DateTime?
+  useCount   Int       @default(0)
+  document   Document  @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  @@index([documentId, createdAt])
+  @@index([createdBy])
+  @@index([expiresAt])
+  @@index([documentId, permission])
+  @@schema("public")
+}
+
+model ShareInvitation {
+  id         String    @id @default(cuid())
+  documentId String
+  email      String    @db.VarChar(255)
+  permission String    @db.VarChar(10)
+  invitedBy  String
+  acceptedAt DateTime?
+  expiresAt  DateTime?
+  createdAt  DateTime  @default(now())
+  document   Document  @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  @@index([documentId, email])
+  @@index([invitedBy])
+  @@index([email, createdAt])
+  @@index([expiresAt])
+  @@index([documentId, permission])
+  @@schema("public")
+}
+
+model DocumentAccess {
+  id         String    @id @default(cuid())
+  documentId String
+  userId     String
+  permission String    @db.VarChar(10)
+  grantedBy  String
+  grantedAt  DateTime  @default(now())
+  expiresAt  DateTime?
+  document   Document  @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  @@unique([documentId, userId])
+  @@index([documentId, permission])
+  @@index([userId, permission])
+  @@index([expiresAt])
+  @@index([grantedBy])
+  @@schema("public")
+}
+
+model DocumentActivity {
+  id         String   @id @default(cuid())
+  documentId String
+  userId     String
+  action     String   @db.VarChar(50)
+  details    Json?
+  createdAt  DateTime @default(now())
+  document   Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  @@index([documentId, createdAt])
+  @@index([userId, createdAt])
+  @@index([documentId, userId])
+  @@index([action])
+  @@schema("public")
+}
+
+enum VoteType {
+  UP
+  DOWN
+
+  @@schema("public")
+}
